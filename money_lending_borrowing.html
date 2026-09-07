@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Money Balance</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8;color:#17202a}
+header{background:#111827;color:#fff;padding:18px 16px 14px;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:25px}.sub{opacity:.75;font-size:13px;margin-top:4px}
+.wrap{max-width:700px;margin:auto;padding:12px}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card{background:#fff;border-radius:16px;padding:14px;box-shadow:0 2px 10px #0000000d}.label{font-size:12px;color:#68727e}.num{font-size:24px;font-weight:800;margin-top:5px}
+.in .num{color:#087f5b}.out .num{color:#c92a2a}.net .num{color:#364fc7}
+.balance{margin-top:10px;background:#111827;color:#fff;border-radius:18px;padding:17px}.balance .num{font-size:31px}
+button,input,select{font:inherit}button{border:0;border-radius:12px;padding:12px 14px;font-weight:700;cursor:pointer}
+.primary{background:#2563eb;color:#fff}.secondary{background:#e9eef5;color:#17202a}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
+.section{background:#fff;border-radius:16px;padding:14px;margin-top:12px}.section h2{font-size:17px;margin:0 0 10px}
+canvas{width:100%;height:210px}
+.tx{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf0f2}.tx:last-child{border:0}.tx b{display:block}.tx small{color:#78818b}.inTxt{color:#087f5b}.outTxt{color:#c92a2a}
+.empty{text-align:center;color:#78818b;padding:22px}
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:10;padding:18px}.box{background:#fff;border-radius:18px;padding:17px;max-width:600px;margin:auto}.box input,.box select{width:100%;padding:12px;margin:6px 0 10px;border:1px solid #ccd3da;border-radius:10px}
+.drop{border:2px dashed #aab3bd;padding:20px;text-align:center;border-radius:15px;margin:8px 0;color:#56616c}
+.hint{font-size:12px;color:#68727e;line-height:1.4}
+footer{font-size:11px;color:#7b858f;text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>💸 Money Balance</h1><div class="sub">Track money lent, borrowed, returned and repaid</div></div></header>
+<main class="wrap">
+<div class="cards">
+<div class="card out"><div class="label">🔴 MONEY OUT</div><div id="out" class="num">₹0</div></div>
+<div class="card in"><div class="label">🟢 MONEY IN</div><div id="inn" class="num">₹0</div></div>
+</div>
+<div class="balance"><div class="label">NET POSITION</div><div id="net" class="num">₹0</div><div class="sub">Goal: keep this at ₹0</div></div>
+
+<div class="actions">
+<button class="primary" onclick="openAdd()">➕ Add transaction</button>
+<button class="secondary" onclick="document.getElementById('files').click()">📸 Import screenshots</button>
+<input id="files" type="file" accept="image/*" multiple hidden onchange="importScreens(this.files)">
+</div>
+
+<div class="section"><h2>📊 Inflow vs Outflow</h2><canvas id="chart" width="700" height="210"></canvas></div>
+<div class="section"><h2>👥 People</h2><div id="people"></div></div>
+<div class="section"><h2>🧾 Transactions</h2><div id="list"></div></div>
+<footer>Data is stored locally in this browser. Screenshot import works only after you select the images. A normal web page cannot silently read your Android Gallery or a Gallery album.</footer>
+</main>
+
+<div id="modal" class="modal"><div class="box">
+<h2 id="mtitle">Add transaction</h2>
+<label>Type</label><select id="type"><option value="out">Lent / Money out</option><option value="in">Borrowed / Money in</option><option value="returnin">Returned to me / Money in</option><option value="returnout">I repaid / Money out</option></select>
+<label>Person / description</label><input id="desc" placeholder="e.g. Ravi lending">
+<label>Amount (₹)</label><input id="amt" type="number" inputmode="decimal" placeholder="1000">
+<label>Date</label><input id="date" type="date">
+<div class="actions"><button class="primary" onclick="saveTx()">Save</button><button class="secondary" onclick="closeModal()">Cancel</button></div>
+<p class="hint">Tip: use names like “Ravi lending” or “Ravi returned”. The app uses the type you choose for exact accounting.</p>
+</div></div>
+
+<script>
+const KEY='money_balance_v1';
+let data=JSON.parse(localStorage.getItem(KEY)||'[]');
+const ru=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
+function isIn(t){return t==='in'||t==='returnin'}
+function isOut(t){return t==='out'||t==='returnout'}
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function openAdd(){document.getElementById('modal').style.display='block';document.getElementById('date').value=new Date().toISOString().slice(0,10)}
+function closeModal(){document.getElementById('modal').style.display='none'}
+function saveTx(){
+ let a=+amt.value;if(!a)return alert('Enter an amount.');
+ data.unshift({id:Date.now(),type:type.value,desc:desc.value||'Unnamed',amount:a,date:date.value||new Date().toISOString().slice(0,10)});
+ save();closeModal();desc.value='';amt.value='';render()
+}
+function del(id){if(confirm('Delete this transaction?')){data=data.filter(x=>x.id!==id);save();render()}}
+function render(){
+ let inn=data.filter(x=>isIn(x.type)).reduce((s,x)=>s+x.amount,0), out=data.filter(x=>isOut(x.type)).reduce((s,x)=>s+x.amount,0);
+ document.getElementById('inn').textContent=ru(inn);document.getElementById('out').textContent=ru(out);
+ let n=inn-out;document.getElementById('net').textContent=(n>=0?'+':'')+ru(n);
+ document.getElementById('net').style.color=n===0?'#69db7c':n>0?'#63e6be':'#ff8787';
+ document.getElementById('list').innerHTML=data.length?data.map(x=>`<div class="tx"><div><b>${esc(x.desc)}</b><small>${x.date} · ${label(x.type)}</small></div><div style="text-align:right"><b class="${isIn(x.type)?'inTxt':'outTxt'}">${isIn(x.type)?'+':'−'}${ru(x.amount)}</b><button onclick="del(${x.id})" style="padding:4px 7px;background:#f1f3f5;margin-top:4px">×</button></div></div>`).join(''):'<div class="empty">No transactions yet.</div>';
+ let p={};data.forEach(x=>{let k=x.desc||'Unnamed';p[k]=(p[k]||0)+(isIn(x.type)?x.amount:-x.amount)});
+ document.getElementById('people').innerHTML=Object.keys(p).length?Object.entries(p).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([k,v])=>`<div class="tx"><b>${esc(k)}</b><b class="${v>=0?'inTxt':'outTxt'}">${v>=0?'+':'−'}${ru(Math.abs(v))}</b></div>`).join(''):'<div class="empty">People will appear here.</div>';
+ draw(inn,out)
+}
+function label(t){return {out:'Lent',in:'Borrowed',returnin:'Returned',returnout:'Repaid'}[t]}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function draw(inn,out){
+ let c=document.getElementById('chart'),x=c.getContext('2d'),w=c.width,h=c.height;x.clearRect(0,0,w,h);
+ let max=Math.max(inn,out,1), base=h-35, bar=100;
+ x.strokeStyle='#dce1e6';x.beginPath();x.moveTo(50,base);x.lineTo(w-25,base);x.stroke();
+ x.fillStyle='#c92a2a';let oh=125*out/max;x.fillRect(150,base-oh,bar,oh);
+ x.fillStyle='#087f5b';let ih=125*inn/max;x.fillRect(400,base-ih,bar,ih);
+ x.fillStyle='#17202a';x.font='bold 14px Arial';x.fillText('OUT',180,base+25);x.fillText('IN',435,base+25);
+ x.fillText(ru(out),170,Math.max(18,base-oh-8));x.fillText(ru(inn),420,Math.max(18,base-ih-8));
+}
+async function importScreens(files){
+ if(!files.length)return;
+ alert('Screenshots selected. Automatic reading of amount/name from Android screenshots needs OCR support. This standalone app cannot reliably access your Gallery album or WhatsApp history. For now, selected screenshots are accepted here as the import step, and you can add the detected transaction manually.');
+}
+render();
+</script>
+</body>
+</html>
